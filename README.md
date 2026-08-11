@@ -1,5 +1,7 @@
 # VPS Fleet Automation
 
+**English** · [Русский](README.ru.md)
+
 Guarded Ansible automation for a small Ubuntu VPS fleet: secure baseline configuration, Docker-based application hosting, n8n deployment, Nginx/HTTPS, inventory generation, operational runbooks, and automated checks.
 
 This repository is a public, sanitized portfolio project. It demonstrates infrastructure-as-code patterns and operational safety controls without containing production inventory, credentials, hostnames, addresses, domains, or private infrastructure state.
