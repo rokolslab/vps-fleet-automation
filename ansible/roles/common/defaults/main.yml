@@ -10,6 +10,7 @@ baseline_packages:
 baseline_ssh_target_port: 2322
 baseline_keep_ssh_port_22: true
 baseline_ssh_current_port: 22
+baseline_ssh_dropin_path: /etc/ssh/sshd_config.d/00-vps-baseline.conf
 
 baseline_ufw_default_incoming: deny
 baseline_ufw_default_outgoing: allow
