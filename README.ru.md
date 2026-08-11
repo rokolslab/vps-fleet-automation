@@ -2,106 +2,142 @@
 
 [English](README.md) · **Русский**
 
-Защищённая по умолчанию Ansible-автоматизация для небольшого парка Ubuntu VPS: базовая настройка и усиление безопасности серверов, размещение приложений в Docker, развёртывание n8n, Nginx/HTTPS, генерация inventory, эксплуатационные инструкции и автоматизированные проверки.
+Защищённая по умолчанию Ansible-автоматизация для небольшого парка Ubuntu VPS: первичный bootstrap, hardening сервера, развёртывание n8n в Docker, публикация через Nginx/HTTPS, генерация inventory, эксплуатационные runbook'и, тесты и CI.
 
-Этот репозиторий — публичная обезличенная версия проекта для портфолио. Он демонстрирует подходы Infrastructure as Code и безопасной эксплуатации, не раскрывая production inventory, учётные данные, реальные имена серверов, IP-адреса, домены или сведения о приватной инфраструктуре.
+Это публичный обезличенный портфолио-проект. Он демонстрирует Infrastructure as Code и безопасную эксплуатацию без production inventory, учётных данных, реальных имён серверов, IP-адресов, доменов и приватного состояния инфраструктуры.
 
 ## Что демонстрирует проект
 
-- **Автоматизация инфраструктуры с Ansible** для Ubuntu Server 24.04 LTS.
-- **Безопасные операции по умолчанию**: явный выбор одного целевого сервера, check mode, fail-fast проверки и контроль состояния после изменений.
-- **Усиление безопасности сервера**: политика SSH, UFW, fail2ban, автоматические обновления безопасности и консервативная настройка swap.
-- **Контейнеризированные сервисы автоматизации** на Docker Compose: PostgreSQL, Redis, n8n и отдельный n8n worker.
-- **Публикация сервисов по HTTPS** через системный Nginx при сохранении внутренних портов приложений только на loopback-интерфейсе.
-- **Inventory as Code**: обезличенные YAML-примеры и генерация локального рабочего inventory.
-- **Эксплуатационная документация**, рассчитанная как на человека, так и на AI coding agents.
-- **Автоматизированные тесты** вспомогательных инструментов и защитных механизмов.
+- **Ansible-автоматизация** для Ubuntu Server 24.04 LTS.
+- **Двухэтапный onboarding**: сначала исходный доступ провайдера, затем проверенный управляемый доступ `ops`.
+- **Safe-by-default mutations**: явный single-host `--limit`, проверки ролей, check mode и fail-closed assertions.
+- **Hardening сервера**: проверка эффективной политики SSH, UFW, fail2ban, unattended upgrades и управляемый swap.
+- **Контейнеризированный n8n** с PostgreSQL, Redis, worker, постоянными секретами и закреплёнными версиями образов.
+- **Корректная работа за reverse proxy** с внешними editor/webhook URL.
+- **Nginx + ACME/HTTPS** при сохранении n8n только на `127.0.0.1:5678`.
+- **Inventory as Code** с обезличенными YAML-примерами и генератором локального inventory.
+- **Runbook'и** для bootstrap/baseline и n8n/HTTPS.
+- **GitHub Actions CI** с pytest и `ansible-playbook --syntax-check`.
 
 ## Модель безопасности
 
 Проект намеренно разделяет переносимую автоматизацию и реальные данные инфраструктуры:
 
 - в Git хранятся только примеры и placeholders;
-- реальные inventory, `.env`, ключи, секреты, резервные копии, exports и эксплуатационные данные должны оставаться вне Git;
-- изменяющие состояние playbook'и требуют явного `--limit`, а при необходимости — дополнительного флага разрешения выполнения;
-- проверка SSH host key не отключается глобально;
-- наружу публикуются только явно предусмотренные сервисы, внутренние порты приложений остаются привязаны к loopback.
+- реальные inventory, `.env`, ключи, секреты, backups, exports, logs и эксплуатационные данные остаются вне Git;
+- изменяющие состояние playbook'и требуют явного single-host `--limit` и подходящей inventory-role;
+- application deployment дополнительно требует explicit apply flag;
+- SSH host-key checking остаётся включённым;
+- common baseline управляет доступом к хосту, application-role — своими публичными портами;
+- секреты n8n не регенерируются автоматически, если обнаружены существующие данные БД.
 
-Политика подробно описана в [`docs/security-model.md`](docs/security-model.md).
+Подробнее: [`docs/security-model.md`](docs/security-model.md).
 
-## Структура репозитория
+## Структура
 
 ```text
 .
+├── .github/workflows/ci.yml
 ├── ansible/
-│   ├── inventories/          # Обезличенный пример inventory
-│   ├── playbooks/            # Read-only проверки и guarded mutations
+│   ├── inventories/
+│   │   ├── bootstrap.example.yml
+│   │   └── production.example.yml
+│   ├── playbooks/
+│   │   ├── bootstrap-admin.yml
+│   │   ├── ping.yml
+│   │   ├── common-baseline.yml
+│   │   ├── n8n-install.yml
+│   │   └── n8n-https-nginx.yml
 │   └── roles/
-│       ├── common/           # Базовая настройка и hardening Ubuntu
-│       ├── n8n_stack/        # Docker Compose стек n8n
-│       └── n8n_https_nginx/  # Nginx + ACME/HTTPS
-├── config/                   # Обезличенные декларативные примеры
-├── docs/                     # Модель безопасности и runbook'и
-├── scripts/                  # Локальные вспомогательные инструменты
-├── tests/                    # Автоматизированные проверки
-├── AGENTS.md                 # Карта проекта для coding agents
+│       ├── common/
+│       ├── n8n_stack/
+│       └── n8n_https_nginx/
+├── config/nodes.example.yml
+├── docs/
+├── scripts/
+├── tests/
+├── AGENTS.md
 └── ansible.cfg
 ```
 
 ## Быстрый старт
 
-На управляющей машине потребуются:
+Установите зависимости на управляющей машине:
 
-- Python 3.11+
-- Ansible Core
-- PyYAML
+```bash
+python3 -m pip install -r requirements-dev.txt ansible-core
+ansible-galaxy collection install -r collections/requirements.yml
+```
 
-Создайте локальный inventory из обезличенного примера:
+### 1. Bootstrap нового VPS
+
+Начинайте с исходного SSH-доступа провайдера, например `root:22`:
+
+```bash
+cp ansible/inventories/bootstrap.example.yml ansible/inventories/bootstrap.yml
+
+ansible-playbook -i ansible/inventories/bootstrap.yml \
+  ansible/playbooks/bootstrap-admin.yml \
+  --limit server-01 \
+  -e bootstrap_admin_public_key_file="$HOME/.ssh/id_ed25519.pub"
+```
+
+### 2. Примените baseline по исходному каналу доступа
+
+```bash
+ansible-playbook -i ansible/inventories/bootstrap.yml \
+  ansible/playbooks/common-baseline.yml \
+  --limit server-01 --check --diff
+```
+
+После проверки повторите без `--check --diff`. По умолчанию baseline оставляет SSH `22` и добавляет/усиливает `2322`.
+
+### 3. Проверьте `ops:2322` и только затем создайте production inventory
+
+Проверьте новый SSH-путь из отдельного терминала. После успешной проверки:
 
 ```bash
 cp config/nodes.example.yml config/nodes.yml
 python3 scripts/generate-inventory.py --overwrite
 ansible-inventory -i ansible/inventories/production.yml --list
-```
-
-Проверьте доступность сервера:
-
-```bash
 ansible-playbook -i ansible/inventories/production.yml ansible/playbooks/ping.yml --limit server-01
 ```
 
-Перед изменениями выполните baseline в check mode:
+Полный порядок: [`docs/runbook-bootstrap-baseline.md`](docs/runbook-bootstrap-baseline.md).
 
-```bash
-ansible-playbook -i ansible/inventories/production.yml \
-  ansible/playbooks/common-baseline.yml \
-  --limit server-01 --check --diff
-```
+### 4. Разверните n8n
 
-Развёртывание n8n выполняется только после проверки целевого сервера и явного разрешения apply:
+Для публичного HTTPS-развёртывания укажите итоговый внешний URL уже при установке stack:
 
 ```bash
 ansible-playbook -i ansible/inventories/production.yml \
   ansible/playbooks/n8n-install.yml \
   --limit automation-01 \
   -e n8n_stack_target_alias=automation-01 \
-  -e allow_n8n_stack_apply=true
+  -e n8n_public_url=https://automation.example.com/ \
+  -e allow_n8n_stack_apply=true \
+  --check --diff
 ```
+
+После review примените изменения и выполните guarded HTTPS-playbook. Подробно: [`docs/runbook-n8n.md`](docs/runbook-n8n.md).
 
 ## Принципы проектирования
 
-1. **Сначала чтение, затем изменение.** Проверка доступности и аудит предшествуют изменениям конфигурации.
-2. **Минимальный blast radius.** Изменяющие операции по умолчанию выполняются только для одного явно выбранного сервера.
-3. **Fail closed.** Предварительные условия проверяются assertions, а не считаются выполненными по умолчанию.
-4. **Секреты остаются локальными.** Ни приватный, ни тем более публичный Git-репозиторий не должен использоваться как хранилище секретов.
-5. **Проверка после изменений.** После конфигурационных изменений проверяются сервисы, listeners и health endpoints.
-6. **Документированный rollback.** Runbook'и описывают ожидаемые изменения и способы восстановления.
+1. **Сначала bootstrap, затем managed state.** Желаемые SSH-настройки не считаются уже существующими.
+2. **Минимальный blast radius.** Mutation выполняется только на одном явно выбранном хосте.
+3. **Fail closed.** Preconditions и effective configuration проверяются явно.
+4. **Секреты остаются вне Git.** Git не является secrets manager.
+5. **Раздельная ответственность.** Host baseline и публикация приложений управляются разными roles.
+6. **Проверка после изменений.** Контролируются SSH policy, listeners, services и health endpoints.
+7. **Документированное восстановление.** Runbook'и содержат rollback/recovery path.
+
+## Проверка качества
+
+CI устанавливает объявленные Ansible collections и выполняет Python-тесты и syntax checks только на обезличенных примерах.
 
 ## Контекст для портфолио
 
-Этот репозиторий представляет собой обезличенную публичную выборку инженерных решений из приватного проекта управления VPS. Production-топология и специализированная приватная автоматизация намеренно не публикуются.
-
-Публичная версия сосредоточена на переносимых инженерных практиках: Ansible, администрировании Linux, Docker, Nginx, n8n, Python-инструментах, тестировании и структуре проекта, удобной для совместной работы с AI coding agents.
+Репозиторий представляет собой обезличенную публичную выборку инженерных паттернов из приватного проекта управления VPS. Production-топология и специализированная приватная автоматизация намеренно исключены. Публичная версия показывает Ansible, Linux administration, Docker, Nginx, n8n, Python tooling, testing, CI и структуру проекта для совместной работы с AI coding agents.
 
 ## Лицензия
 
