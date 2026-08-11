@@ -21,13 +21,19 @@
     group: root
     mode: '0750'
 
-- name: Generate local stack secrets when absent
+- name: Check whether protected environment already exists
+  ansible.builtin.stat:
+    path: "{{ n8n_stack_dir }}/.env"
+  register: n8n_env_file
+
+- name: Generate initial stack secrets
   ansible.builtin.set_fact:
     n8n_generated_postgres_password: "{{ lookup('ansible.builtin.password', '/dev/null', length=32, chars=['ascii_letters','digits']) }}"
     n8n_generated_encryption_key: "{{ lookup('ansible.builtin.password', '/dev/null', length=48, chars=['ascii_letters','digits']) }}"
   no_log: true
+  when: not n8n_env_file.stat.exists
 
-- name: Write protected environment file
+- name: Write protected environment file once
   ansible.builtin.copy:
     dest: "{{ n8n_stack_dir }}/.env"
     owner: root
@@ -37,6 +43,7 @@
       POSTGRES_PASSWORD={{ n8n_generated_postgres_password }}
       N8N_ENCRYPTION_KEY={{ n8n_generated_encryption_key }}
   no_log: true
+  when: not n8n_env_file.stat.exists
 
 - name: Render Docker Compose stack
   ansible.builtin.template:
