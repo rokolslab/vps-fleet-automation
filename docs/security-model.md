@@ -19,18 +19,30 @@ Tracked examples use documentation-only addresses and generic aliases such as `s
 Mutating playbooks should:
 
 1. require an explicit single-host `--limit` by default;
-2. fail when the target does not match the reviewed role or alias;
-3. use explicit apply flags for high-impact application deployment;
+2. fail when the target does not match the reviewed inventory role or alias;
+3. use explicit apply flags for application deployment;
 4. support check mode where the underlying modules make that meaningful;
 5. document SSH/firewall lockout risks before apply;
-6. verify listeners, services, or health endpoints after changes.
+6. verify effective configuration, listeners, services, or health endpoints after changes.
+
+## Bootstrap and privilege model
+
+A newly provisioned VPS starts from a local, gitignored provider-access inventory. `bootstrap-admin.yml` creates the managed `ops` account, installs a reviewed SSH public key, and by default creates a `visudo`-validated `NOPASSWD` sudoers drop-in for non-interactive Ansible automation. Password SSH authentication is later disabled by the baseline.
+
+The post-baseline production inventory must not be treated as valid until the managed SSH path has been independently verified.
 
 ## SSH and firewall
 
-SSH host-key checking stays enabled. During an SSH port migration, keep the previous access path available until the new port has been verified from a separate session or provider console. Public firewall ports are opt-in variables, not hard-coded assumptions.
+SSH host-key checking stays enabled. The common baseline owns SSH access and default UFW policy only. Application roles own their explicit public listeners; for example, the n8n HTTPS role owns `80/tcp` and `443/tcp`.
+
+During an SSH port migration, keep port `22` available until the target port has been verified from a separate session or provider console. The baseline uses an early OpenSSH drop-in and verifies effective `sshd -T` policy before restarting SSH.
 
 ## Application secrets
 
-Generated n8n secrets are stored only in the remote protected `.env` file (`0600`). The role creates this file only when it does not already exist, preventing accidental encryption-key rotation on reruns.
+Generated n8n secrets are stored only in the remote protected `.env` file (`0600`). The role creates this file only when it does not already exist. If persistent n8n database data exists while `.env` is missing, the role fails closed rather than generating replacement credentials or an encryption key.
 
 For shared production environments, use a dedicated secret manager, SOPS/age, or Ansible Vault rather than storing secret material in this repository.
+
+## CI boundary
+
+CI validates Python tests and Ansible syntax against sanitized examples only. CI must never receive production inventory or secrets.
