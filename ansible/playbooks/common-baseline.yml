@@ -1,0 +1,34 @@
+---
+- name: Apply common VPS baseline to one explicitly limited Ubuntu host
+  hosts: all
+  gather_facts: true
+  become: true
+
+  pre_tasks:
+    - name: Guard | Require explicit single-host limit
+      ansible.builtin.assert:
+        that:
+          - ansible_limit is defined
+          - ansible_limit | length > 0
+          - ansible_limit != 'all'
+          - ansible_play_hosts_all | length == 1
+        fail_msg: "This playbook is mutating. Run it with an explicit single-host --limit."
+
+    - name: Guard | Require Ubuntu 24.04
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == 'Ubuntu'
+          - ansible_distribution_version is version('24.04', '>=')
+          - ansible_distribution_version is version('25.00', '<')
+        fail_msg: "The public baseline is validated for Ubuntu 24.04 LTS."
+
+    - name: Guard | Show rollout notes
+      ansible.builtin.debug:
+        msg:
+          - "Run --check --diff before apply."
+          - "Keep provider console access available during SSH/firewall changes."
+          - "Verify the new SSH port before removing legacy access."
+          - "Do not place private keys, credentials, tokens, or real inventory in Git."
+
+  roles:
+    - role: ../roles/common
