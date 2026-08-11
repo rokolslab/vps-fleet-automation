@@ -1,0 +1,51 @@
+---
+- name: Check managed swap file
+  ansible.builtin.stat:
+    path: "{{ baseline_swap_file_path }}"
+  register: baseline_swap_file
+
+- name: Create managed swap file when absent
+  ansible.builtin.command:
+    cmd: "fallocate -l {{ baseline_swap_size_mb }}M {{ baseline_swap_file_path }}"
+  when: not baseline_swap_file.stat.exists
+
+- name: Set managed swap file permissions
+  ansible.builtin.file:
+    path: "{{ baseline_swap_file_path }}"
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Detect swap signature on managed file
+  ansible.builtin.command: "file -b {{ baseline_swap_file_path }}"
+  register: baseline_swap_signature
+  changed_when: false
+
+- name: Initialize managed swap file when needed
+  ansible.builtin.command: "mkswap {{ baseline_swap_file_path }}"
+  when: "'swap file' not in baseline_swap_signature.stdout | lower"
+
+- name: Read active swap paths
+  ansible.builtin.command: swapon --show=NAME --noheadings
+  register: baseline_active_swaps
+  changed_when: false
+  check_mode: false
+
+- name: Enable managed swap file when inactive
+  ansible.builtin.command: "swapon {{ baseline_swap_file_path }}"
+  when:
+    - baseline_swap_file_path not in baseline_active_swaps.stdout_lines
+    - not ansible_check_mode
+
+- name: Persist managed swap file
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    line: "{{ baseline_swap_file_path }} none swap sw 0 0"
+    state: present
+
+- name: Configure swappiness
+  ansible.posix.sysctl:
+    name: vm.swappiness
+    value: "{{ baseline_swappiness }}"
+    state: present
+    reload: true
