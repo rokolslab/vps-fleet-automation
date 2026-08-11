@@ -51,13 +51,32 @@
       - "'permitrootlogin prohibit-password' in baseline_sshd_effective.stdout_lines or 'permitrootlogin without-password' in baseline_sshd_effective.stdout_lines"
     fail_msg: >-
       Effective sshd configuration does not match the managed hardening policy.
-      Inspect earlier OpenSSH configuration before restarting SSH.
+      Inspect earlier OpenSSH configuration before reloading the listener.
   when: not ansible_check_mode
 
-- name: Restart SSH only after validation when policy changed
+- name: Detect Ubuntu SSH socket activation
+  ansible.builtin.command: systemctl is-active ssh.socket
+  register: baseline_ssh_socket_active
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Reload systemd and restart active SSH socket after policy change
+  ansible.builtin.systemd_service:
+    name: ssh.socket
+    state: restarted
+    enabled: true
+    daemon_reload: true
+  when:
+    - baseline_sshd_dropin.changed
+    - baseline_ssh_socket_active.rc == 0
+    - not ansible_check_mode
+
+- name: Restart classic SSH service after policy change
   ansible.builtin.service:
     name: ssh
     state: restarted
   when:
     - baseline_sshd_dropin.changed
+    - baseline_ssh_socket_active.rc != 0
     - not ansible_check_mode
