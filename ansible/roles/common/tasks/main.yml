@@ -32,31 +32,13 @@
     proto: tcp
     delete: "{{ not (baseline_keep_ssh_port_22 | bool) }}"
 
-- name: Allow explicitly configured public TCP ports
-  community.general.ufw:
-    rule: allow
-    port: "{{ item }}"
-    proto: tcp
-  loop: "{{ baseline_public_tcp_ports }}"
-
 - name: Enable UFW
   community.general.ufw:
     state: enabled
 
-- name: Enable fail2ban
-  ansible.builtin.service:
-    name: fail2ban
-    state: started
-    enabled: true
-  when: baseline_fail2ban_enabled | bool
+- name: Apply fail2ban and unattended-upgrades policy
+  ansible.builtin.import_tasks: security.yml
 
 - name: Apply managed swap configuration
   ansible.builtin.import_tasks: swap.yml
   when: baseline_swap_enabled | bool
-
-- name: Enable unattended upgrades
-  ansible.builtin.service:
-    name: unattended-upgrades
-    state: started
-    enabled: true
-  when: baseline_unattended_upgrades_enabled | bool
