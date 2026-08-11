@@ -26,6 +26,21 @@
     path: "{{ n8n_stack_dir }}/.env"
   register: n8n_env_file
 
+- name: Check whether persistent n8n database volume already exists
+  ansible.builtin.command: docker volume inspect n8n_postgres_data
+  register: n8n_existing_db_volume
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Guard | Refuse secret regeneration for existing data
+  ansible.builtin.assert:
+    that:
+      - n8n_env_file.stat.exists or n8n_existing_db_volume.rc != 0
+    fail_msg: >-
+      Persistent n8n database data exists but the protected .env file is missing.
+      Restore the original secrets before continuing; automatic secret rotation is refused.
+
 - name: Generate initial stack secrets
   ansible.builtin.set_fact:
     n8n_generated_postgres_password: "{{ lookup('ansible.builtin.password', '/dev/null', length=32, chars=['ascii_letters','digits']) }}"
@@ -53,12 +68,15 @@
     group: root
     mode: '0640'
 
-- name: Start n8n stack
+- name: Apply n8n Docker Compose stack
   ansible.builtin.command:
     cmd: docker compose up -d
     chdir: "{{ n8n_stack_dir }}"
   register: n8n_compose_up
-  changed_when: "'Started' in n8n_compose_up.stdout or 'Created' in n8n_compose_up.stdout"
+  changed_when: >-
+    'Created' in (n8n_compose_up.stdout ~ n8n_compose_up.stderr) or
+    'Started' in (n8n_compose_up.stdout ~ n8n_compose_up.stderr) or
+    'Recreated' in (n8n_compose_up.stdout ~ n8n_compose_up.stderr)
 
 - name: Wait for loopback n8n port
   ansible.builtin.wait_for:
