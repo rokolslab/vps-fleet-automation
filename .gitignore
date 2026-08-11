@@ -7,6 +7,7 @@ __pycache__/
 .pytest_cache/
 .ansible/
 *.retry
+*.log
 
 # Real inventories and local fleet data
 ansible/inventories/*.yml
