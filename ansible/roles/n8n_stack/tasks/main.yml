@@ -1,0 +1,60 @@
+---
+- name: Install Docker packages
+  ansible.builtin.apt:
+    name:
+      - docker.io
+      - docker-compose-v2
+    state: present
+    update_cache: true
+
+- name: Enable Docker
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: true
+
+- name: Create n8n stack directory
+  ansible.builtin.file:
+    path: "{{ n8n_stack_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0750'
+
+- name: Generate local stack secrets when absent
+  ansible.builtin.set_fact:
+    n8n_generated_postgres_password: "{{ lookup('ansible.builtin.password', '/dev/null', length=32, chars=['ascii_letters','digits']) }}"
+    n8n_generated_encryption_key: "{{ lookup('ansible.builtin.password', '/dev/null', length=48, chars=['ascii_letters','digits']) }}"
+  no_log: true
+
+- name: Write protected environment file
+  ansible.builtin.copy:
+    dest: "{{ n8n_stack_dir }}/.env"
+    owner: root
+    group: root
+    mode: '0600'
+    content: |
+      POSTGRES_PASSWORD={{ n8n_generated_postgres_password }}
+      N8N_ENCRYPTION_KEY={{ n8n_generated_encryption_key }}
+  no_log: true
+
+- name: Render Docker Compose stack
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ n8n_stack_dir }}/docker-compose.yml"
+    owner: root
+    group: root
+    mode: '0640'
+
+- name: Start n8n stack
+  ansible.builtin.command:
+    cmd: docker compose up -d
+    chdir: "{{ n8n_stack_dir }}"
+  register: n8n_compose_up
+  changed_when: "'Started' in n8n_compose_up.stdout or 'Created' in n8n_compose_up.stdout"
+
+- name: Wait for loopback n8n port
+  ansible.builtin.wait_for:
+    host: "{{ n8n_bind_host }}"
+    port: "{{ n8n_bind_port }}"
+    timeout: 60
