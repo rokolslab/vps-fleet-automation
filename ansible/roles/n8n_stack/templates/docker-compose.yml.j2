@@ -33,6 +33,11 @@ services:
       EXECUTIONS_MODE: queue
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
       GENERIC_TIMEZONE: {{ n8n_timezone }}
+{% if n8n_public_url | length > 0 %}
+      WEBHOOK_URL: {{ n8n_public_url }}
+      N8N_EDITOR_BASE_URL: {{ n8n_public_url }}
+      N8N_PROXY_HOPS: "{{ n8n_proxy_hops }}"
+{% endif %}
     volumes:
       - n8n_data:/home/node/.n8n
 
