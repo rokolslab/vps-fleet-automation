@@ -1,4 +1,10 @@
 ---
+- name: Verify loopback n8n upstream before mutation
+  ansible.builtin.wait_for:
+    host: "{{ n8n_https_upstream_host }}"
+    port: "{{ n8n_https_upstream_port }}"
+    timeout: 10
+
 - name: Install Nginx and Certbot
   ansible.builtin.apt:
     name:
@@ -6,6 +12,18 @@
       - certbot
     state: present
     update_cache: true
+
+- name: Allow HTTP for ACME challenge
+  community.general.ufw:
+    rule: allow
+    port: '80'
+    proto: tcp
+
+- name: Allow HTTPS publication
+  community.general.ufw:
+    rule: allow
+    port: '443'
+    proto: tcp
 
 - name: Ensure ACME webroot exists
   ansible.builtin.file:
@@ -42,7 +60,7 @@
     state: reloaded
     enabled: true
 
-- name: Request or renew certificate with webroot
+- name: Request initial certificate with webroot
   ansible.builtin.command: >-
     certbot certonly --webroot -w /var/www/html
     -d {{ n8n_https_domain }} --non-interactive --agree-tos
@@ -79,7 +97,7 @@
     state: reloaded
     enabled: true
 
-- name: Verify loopback n8n upstream remains reachable
+- name: Verify loopback n8n upstream after publication
   ansible.builtin.wait_for:
     host: "{{ n8n_https_upstream_host }}"
     port: "{{ n8n_https_upstream_port }}"
