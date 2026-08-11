@@ -7,7 +7,7 @@
     bootstrap_admin_user: ops
     bootstrap_admin_public_key_file: ""
     bootstrap_admin_sudo_group: sudo
-    bootstrap_admin_sudo_nopasswd: false
+    bootstrap_admin_sudo_nopasswd: true
 
   pre_tasks:
     - name: Guard | Require explicit single-host limit
@@ -65,7 +65,7 @@
         manage_dir: true
       no_log: true
 
-    - name: Optionally enable passwordless sudo
+    - name: Configure validated passwordless sudo for automation account
       ansible.builtin.copy:
         dest: "/etc/sudoers.d/90-{{ bootstrap_admin_user }}-managed"
         owner: root
