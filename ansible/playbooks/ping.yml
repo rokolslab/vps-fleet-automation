@@ -1,0 +1,7 @@
+---
+- name: Check Ansible connectivity
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Verify host is reachable via Ansible
+      ansible.builtin.ping:
