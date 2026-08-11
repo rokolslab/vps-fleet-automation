@@ -1,0 +1,15 @@
+all:
+  hosts:
+    server-01:
+      ansible_host: 192.0.2.10
+      ansible_user: root
+      ansible_port: 22
+      node_roles:
+        - baseline
+    automation-01:
+      ansible_host: 192.0.2.20
+      ansible_user: root
+      ansible_port: 22
+      node_roles:
+        - baseline
+        - automation

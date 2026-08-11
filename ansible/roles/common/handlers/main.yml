@@ -1,5 +1,5 @@
 ---
-- name: Restart ssh
+- name: Restart fail2ban
   ansible.builtin.service:
-    name: ssh
+    name: fail2ban
     state: restarted

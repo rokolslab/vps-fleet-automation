@@ -12,22 +12,24 @@
           - ansible_limit | length > 0
           - ansible_limit != 'all'
           - ansible_play_hosts_all | length == 1
-        fail_msg: "This playbook is mutating. Run it with an explicit single-host --limit."
+          - "'baseline' in (node_roles | default([]))"
+        fail_msg: >-
+          This playbook is mutating. Target exactly one inventory host carrying
+          the baseline role with an explicit --limit.
 
-    - name: Guard | Require Ubuntu 24.04
+    - name: Guard | Require Ubuntu 24.04 LTS
       ansible.builtin.assert:
         that:
           - ansible_distribution == 'Ubuntu'
-          - ansible_distribution_version is version('24.04', '>=')
-          - ansible_distribution_version is version('25.00', '<')
-        fail_msg: "The public baseline is validated for Ubuntu 24.04 LTS."
+          - ansible_distribution_version is version('24.04', '==')
+        fail_msg: "The public baseline is validated for Ubuntu 24.04 LTS only."
 
     - name: Guard | Show rollout notes
       ansible.builtin.debug:
         msg:
           - "Run --check --diff before apply."
           - "Keep provider console access available during SSH/firewall changes."
-          - "Verify the new SSH port before removing legacy access."
+          - "Keep port 22 until the target SSH port is verified from a separate session."
           - "Do not place private keys, credentials, tokens, or real inventory in Git."
 
   roles:

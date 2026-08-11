@@ -1,0 +1,86 @@
+---
+- name: Bootstrap managed admin user on one reviewed host
+  hosts: all
+  gather_facts: false
+  become: true
+  vars:
+    bootstrap_admin_user: ops
+    bootstrap_admin_public_key_file: ""
+    bootstrap_admin_sudo_group: sudo
+    bootstrap_admin_sudo_nopasswd: true
+
+  pre_tasks:
+    - name: Guard | Require explicit single-host limit
+      ansible.builtin.assert:
+        that:
+          - ansible_limit is defined
+          - ansible_limit | length > 0
+          - ansible_limit != 'all'
+          - ansible_play_hosts_all | length == 1
+          - bootstrap_admin_public_key_file | length > 0
+        fail_msg: >-
+          Bootstrap is mutating. Target exactly one host and provide
+          bootstrap_admin_public_key_file pointing to a local OpenSSH public key.
+
+    - name: Check local admin public key
+      ansible.builtin.stat:
+        path: "{{ bootstrap_admin_public_key_file }}"
+      register: bootstrap_admin_key_stat
+      delegate_to: localhost
+      become: false
+
+    - name: Validate local admin public key file
+      ansible.builtin.assert:
+        that:
+          - bootstrap_admin_key_stat.stat.exists
+          - bootstrap_admin_key_stat.stat.isreg
+        fail_msg: "Public key not found: {{ bootstrap_admin_public_key_file }}"
+
+    - name: Load local admin public key
+      ansible.builtin.set_fact:
+        bootstrap_admin_public_key: "{{ lookup('ansible.builtin.file', bootstrap_admin_public_key_file) }}"
+      no_log: true
+
+    - name: Validate OpenSSH public key format
+      ansible.builtin.assert:
+        that:
+          - bootstrap_admin_public_key is match('^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp[0-9]+) ')
+        fail_msg: "The supplied file is not a supported OpenSSH public key."
+
+  tasks:
+    - name: Ensure managed admin user exists
+      ansible.builtin.user:
+        name: "{{ bootstrap_admin_user }}"
+        shell: /bin/bash
+        create_home: true
+        groups: "{{ bootstrap_admin_sudo_group }}"
+        append: true
+        state: present
+
+    - name: Install managed admin SSH key
+      ansible.posix.authorized_key:
+        user: "{{ bootstrap_admin_user }}"
+        key: "{{ bootstrap_admin_public_key }}"
+        state: present
+        manage_dir: true
+      no_log: true
+
+    - name: Configure validated passwordless sudo for automation account
+      ansible.builtin.copy:
+        dest: "/etc/sudoers.d/90-{{ bootstrap_admin_user }}-managed"
+        owner: root
+        group: root
+        mode: '0440'
+        content: "{{ bootstrap_admin_user }} ALL=(ALL:ALL) NOPASSWD:ALL\n"
+        validate: /usr/sbin/visudo -cf %s
+      when: bootstrap_admin_sudo_nopasswd | bool
+
+    - name: Verify managed admin group membership
+      ansible.builtin.command: "id -nG {{ bootstrap_admin_user }}"
+      register: bootstrap_admin_groups
+      changed_when: false
+
+    - name: Assert sudo group membership
+      ansible.builtin.assert:
+        that:
+          - bootstrap_admin_sudo_group in bootstrap_admin_groups.stdout.split()

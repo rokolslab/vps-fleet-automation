@@ -1,0 +1,65 @@
+---
+- name: Check managed swap file
+  ansible.builtin.stat:
+    path: "{{ baseline_swap_file_path }}"
+  register: baseline_swap_file
+
+- name: Show planned swap creation in check mode
+  ansible.builtin.debug:
+    msg: "Would create and initialize {{ baseline_swap_file_path }} ({{ baseline_swap_size_mb }} MiB)."
+  when:
+    - ansible_check_mode
+    - not baseline_swap_file.stat.exists
+
+- name: Create managed swap file when absent
+  ansible.builtin.command:
+    cmd: "fallocate -l {{ baseline_swap_size_mb }}M {{ baseline_swap_file_path }}"
+  when:
+    - not baseline_swap_file.stat.exists
+    - not ansible_check_mode
+
+- name: Set managed swap file permissions
+  ansible.builtin.file:
+    path: "{{ baseline_swap_file_path }}"
+    owner: root
+    group: root
+    mode: '0600'
+  when:
+    - baseline_swap_file.stat.exists or not ansible_check_mode
+
+- name: Detect swap signature on managed file
+  ansible.builtin.command: "file -b {{ baseline_swap_file_path }}"
+  register: baseline_swap_signature
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Initialize managed swap file when needed
+  ansible.builtin.command: "mkswap {{ baseline_swap_file_path }}"
+  when:
+    - not ansible_check_mode
+    - "'swap file' not in baseline_swap_signature.stdout | lower"
+
+- name: Read active swap paths
+  ansible.builtin.command: swapon --show=NAME --noheadings
+  register: baseline_active_swaps
+  changed_when: false
+  check_mode: false
+
+- name: Enable managed swap file when inactive
+  ansible.builtin.command: "swapon {{ baseline_swap_file_path }}"
+  when:
+    - not ansible_check_mode
+    - baseline_swap_file_path not in baseline_active_swaps.stdout_lines
+
+- name: Persist managed swap file
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    line: "{{ baseline_swap_file_path }} none swap sw 0 0"
+    state: present
+
+- name: Configure swappiness
+  ansible.posix.sysctl:
+    name: vm.swappiness
+    value: "{{ baseline_swappiness }}"
+    state: present
+    reload: true

@@ -1,0 +1,82 @@
+---
+- name: Ensure sshd drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/ssh/sshd_config.d
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Configure managed SSH policy
+  ansible.builtin.copy:
+    dest: "{{ baseline_ssh_dropin_path }}"
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      # Managed by vps-fleet-automation.
+      Port {{ baseline_ssh_target_port }}
+      {% if baseline_keep_ssh_port_22 | bool %}
+      Port {{ baseline_ssh_current_port }}
+      {% endif %}
+      PasswordAuthentication no
+      PermitRootLogin prohibit-password
+  register: baseline_sshd_dropin
+
+- name: Show planned SSH policy in check mode
+  ansible.builtin.debug:
+    msg:
+      target_port: "{{ baseline_ssh_target_port }}"
+      legacy_port_kept: "{{ baseline_keep_ssh_port_22 | bool }}"
+      password_authentication: disabled
+      root_login: key_only
+  when: ansible_check_mode
+
+- name: Validate complete sshd configuration after apply
+  ansible.builtin.command: /usr/sbin/sshd -t
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Read effective sshd configuration after apply
+  ansible.builtin.command: /usr/sbin/sshd -T
+  register: baseline_sshd_effective
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Verify effective SSH hardening and target port
+  ansible.builtin.assert:
+    that:
+      - "('port ' ~ (baseline_ssh_target_port | string)) in baseline_sshd_effective.stdout_lines"
+      - "'passwordauthentication no' in baseline_sshd_effective.stdout_lines"
+      - "'permitrootlogin prohibit-password' in baseline_sshd_effective.stdout_lines or 'permitrootlogin without-password' in baseline_sshd_effective.stdout_lines"
+    fail_msg: >-
+      Effective sshd configuration does not match the managed hardening policy.
+      Inspect earlier OpenSSH configuration before reloading the listener.
+  when: not ansible_check_mode
+
+- name: Detect Ubuntu SSH socket activation
+  ansible.builtin.command: systemctl is-active ssh.socket
+  register: baseline_ssh_socket_active
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Reload systemd and restart active SSH socket after policy change
+  ansible.builtin.systemd_service:
+    name: ssh.socket
+    state: restarted
+    enabled: true
+    daemon_reload: true
+  when:
+    - baseline_sshd_dropin.changed
+    - baseline_ssh_socket_active.rc == 0
+    - not ansible_check_mode
+
+- name: Restart classic SSH service after policy change
+  ansible.builtin.service:
+    name: ssh
+    state: restarted
+  when:
+    - baseline_sshd_dropin.changed
+    - baseline_ssh_socket_active.rc != 0
+    - not ansible_check_mode

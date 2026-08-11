@@ -1,4 +1,15 @@
 ---
+- name: Verify loopback n8n upstream before mutation
+  ansible.builtin.wait_for:
+    host: "{{ n8n_https_upstream_host }}"
+    port: "{{ n8n_https_upstream_port }}"
+    timeout: 10
+
+- name: Check whether Nginx site directory already exists
+  ansible.builtin.stat:
+    path: /etc/nginx/sites-available
+  register: n8n_nginx_sites_dir
+
 - name: Install Nginx and Certbot
   ansible.builtin.apt:
     name:
@@ -7,6 +18,33 @@
     state: present
     update_cache: true
 
+- name: Allow HTTP for ACME challenge
+  community.general.ufw:
+    rule: allow
+    port: '80'
+    proto: tcp
+
+- name: Allow HTTPS publication
+  community.general.ufw:
+    rule: allow
+    port: '443'
+    proto: tcp
+
+- name: Show planned Nginx and ACME configuration on first-run check mode
+  ansible.builtin.debug:
+    msg: >-
+      Would install Nginx/Certbot, create the HTTP-01 challenge site, request the initial
+      certificate, and publish n8n on HTTPS for {{ n8n_https_domain }}.
+  when:
+    - ansible_check_mode
+    - not n8n_nginx_sites_dir.stat.exists
+
+- name: Disable packaged Nginx default site
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  when: not ansible_check_mode or n8n_nginx_sites_dir.stat.exists
+
 - name: Ensure ACME webroot exists
   ansible.builtin.file:
     path: /var/www/html/.well-known/acme-challenge
@@ -14,6 +52,7 @@
     owner: www-data
     group: www-data
     mode: '0755'
+  when: not ansible_check_mode or n8n_nginx_sites_dir.stat.exists
 
 - name: Install temporary HTTP-only ACME configuration
   ansible.builtin.copy:
@@ -25,30 +64,35 @@
           server_name {{ n8n_https_domain }};
           location /.well-known/acme-challenge/ { root /var/www/html; }
       }
+  when: not ansible_check_mode or n8n_nginx_sites_dir.stat.exists
 
 - name: Enable temporary ACME site
   ansible.builtin.file:
     src: /etc/nginx/sites-available/n8n-bootstrap.conf
     dest: /etc/nginx/sites-enabled/n8n-bootstrap.conf
     state: link
+  when: not ansible_check_mode or n8n_nginx_sites_dir.stat.exists
 
 - name: Validate temporary Nginx configuration
   ansible.builtin.command: nginx -t
   changed_when: false
+  when: not ansible_check_mode
 
 - name: Reload Nginx for ACME challenge
   ansible.builtin.service:
     name: nginx
     state: reloaded
     enabled: true
+  when: not ansible_check_mode
 
-- name: Request or renew certificate with webroot
+- name: Request initial certificate with webroot
   ansible.builtin.command: >-
     certbot certonly --webroot -w /var/www/html
     -d {{ n8n_https_domain }} --non-interactive --agree-tos
     {{ '--email ' ~ n8n_https_certbot_email if n8n_https_certbot_email | length > 0 else '--register-unsafely-without-email' }}
   args:
     creates: "/etc/letsencrypt/live/{{ n8n_https_domain }}/fullchain.pem"
+  when: not ansible_check_mode
 
 - name: Render final HTTPS site
   ansible.builtin.template:
@@ -57,30 +101,36 @@
     owner: root
     group: root
     mode: '0644'
+  when: not ansible_check_mode or n8n_nginx_sites_dir.stat.exists
 
 - name: Enable final HTTPS site
   ansible.builtin.file:
     src: /etc/nginx/sites-available/n8n.conf
     dest: /etc/nginx/sites-enabled/n8n.conf
     state: link
+  when: not ansible_check_mode or n8n_nginx_sites_dir.stat.exists
 
 - name: Remove temporary ACME site link
   ansible.builtin.file:
     path: /etc/nginx/sites-enabled/n8n-bootstrap.conf
     state: absent
+  when: not ansible_check_mode or n8n_nginx_sites_dir.stat.exists
 
 - name: Validate final Nginx configuration
   ansible.builtin.command: nginx -t
   changed_when: false
+  when: not ansible_check_mode
 
 - name: Reload final Nginx configuration
   ansible.builtin.service:
     name: nginx
     state: reloaded
     enabled: true
+  when: not ansible_check_mode
 
-- name: Verify loopback n8n upstream remains reachable
+- name: Verify loopback n8n upstream after publication
   ansible.builtin.wait_for:
     host: "{{ n8n_https_upstream_host }}"
     port: "{{ n8n_https_upstream_port }}"
     timeout: 30
+  when: not ansible_check_mode

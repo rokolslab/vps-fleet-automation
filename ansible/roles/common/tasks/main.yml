@@ -6,20 +6,8 @@
     update_cache: true
     cache_valid_time: 3600
 
-- name: Configure SSH listen ports
-  ansible.builtin.copy:
-    dest: /etc/ssh/sshd_config.d/99-vps-baseline.conf
-    owner: root
-    group: root
-    mode: '0644'
-    content: |
-      Port {{ baseline_ssh_target_port }}
-      {% if baseline_keep_ssh_port_22 %}
-      Port {{ baseline_ssh_current_port }}
-      {% endif %}
-      PasswordAuthentication no
-      PermitRootLogin prohibit-password
-  notify: Restart ssh
+- name: Apply SSH hardening
+  ansible.builtin.import_tasks: ssh.yml
 
 - name: Set UFW default incoming policy
   community.general.ufw:
@@ -37,79 +25,20 @@
     port: "{{ baseline_ssh_target_port }}"
     proto: tcp
 
-- name: Keep legacy SSH port during migration
+- name: Manage legacy SSH port during migration
   community.general.ufw:
     rule: allow
     port: "{{ baseline_ssh_current_port }}"
     proto: tcp
-  when: baseline_keep_ssh_port_22 | bool
-
-- name: Allow explicitly configured public TCP ports
-  community.general.ufw:
-    rule: allow
-    port: "{{ item }}"
-    proto: tcp
-  loop: "{{ baseline_public_tcp_ports }}"
+    delete: "{{ not (baseline_keep_ssh_port_22 | bool) }}"
 
 - name: Enable UFW
   community.general.ufw:
     state: enabled
 
-- name: Enable fail2ban
-  ansible.builtin.service:
-    name: fail2ban
-    state: started
-    enabled: true
-  when: baseline_fail2ban_enabled | bool
+- name: Apply fail2ban and unattended-upgrades policy
+  ansible.builtin.import_tasks: security.yml
 
-- name: Create swap file
-  ansible.builtin.command:
-    cmd: "fallocate -l {{ baseline_swap_size_mb }}M {{ baseline_swap_file_path }}"
-    creates: "{{ baseline_swap_file_path }}"
+- name: Apply managed swap configuration
+  ansible.builtin.import_tasks: swap.yml
   when: baseline_swap_enabled | bool
-
-- name: Set swap file permissions
-  ansible.builtin.file:
-    path: "{{ baseline_swap_file_path }}"
-    owner: root
-    group: root
-    mode: '0600'
-  when: baseline_swap_enabled | bool
-
-- name: Initialize swap file
-  ansible.builtin.command:
-    cmd: "mkswap {{ baseline_swap_file_path }}"
-  register: swap_init
-  changed_when: "'setting up swapspace' in swap_init.stdout"
-  when:
-    - baseline_swap_enabled | bool
-    - ansible_swaptotal_mb | int == 0
-
-- name: Enable swap file
-  ansible.builtin.command:
-    cmd: "swapon {{ baseline_swap_file_path }}"
-  when:
-    - baseline_swap_enabled | bool
-    - ansible_swaptotal_mb | int == 0
-
-- name: Persist swap file
-  ansible.builtin.lineinfile:
-    path: /etc/fstab
-    line: "{{ baseline_swap_file_path }} none swap sw 0 0"
-    state: present
-  when: baseline_swap_enabled | bool
-
-- name: Configure swappiness
-  ansible.posix.sysctl:
-    name: vm.swappiness
-    value: "{{ baseline_swappiness }}"
-    state: present
-    reload: true
-  when: baseline_swap_enabled | bool
-
-- name: Enable unattended upgrades
-  ansible.builtin.service:
-    name: unattended-upgrades
-    state: started
-    enabled: true
-  when: baseline_unattended_upgrades_enabled | bool
