@@ -2,104 +2,149 @@
 
 **English** · [Русский](README.ru.md)
 
-Guarded Ansible automation for a small Ubuntu VPS fleet: secure baseline configuration, Docker-based application hosting, n8n deployment, Nginx/HTTPS, inventory generation, operational runbooks, and automated checks.
+Guarded Ansible automation for a small Ubuntu VPS fleet: first-access bootstrap, secure host baseline, Docker-based n8n deployment, Nginx/HTTPS publication, inventory generation, operational runbooks, tests, and CI validation.
 
-This repository is a public, sanitized portfolio project. It demonstrates infrastructure-as-code patterns and operational safety controls without containing production inventory, credentials, hostnames, addresses, domains, or private infrastructure state.
+This repository is a public, sanitized portfolio project. It demonstrates Infrastructure as Code and operational safety controls without containing production inventory, credentials, real hostnames, addresses, domains, or private infrastructure state.
 
 ## What this project demonstrates
 
 - **Ansible infrastructure automation** for Ubuntu Server 24.04 LTS.
-- **Safe-by-default operations** with explicit single-host targeting, check mode, fail-fast assertions, and post-change verification.
-- **Server hardening** with SSH policy, UFW, fail2ban, unattended upgrades, and conservative swap configuration.
-- **Containerized automation workloads** using Docker Compose, PostgreSQL, Redis, n8n, and an n8n worker.
-- **HTTPS publishing** through host Nginx while keeping application ports bound to loopback.
+- **Two-stage onboarding**: provider SSH access first, verified managed `ops` access second.
+- **Safe-by-default mutations** with explicit single-host targeting, role guards, check mode, and fail-closed assertions.
+- **Server hardening** with effective SSH policy verification, UFW, fail2ban, unattended upgrades, and managed swap.
+- **Containerized n8n** with PostgreSQL, Redis, a worker, persistent secrets, and pinned image versions.
+- **Reverse-proxy-aware n8n settings** for external HTTPS editor/webhook URLs.
+- **Nginx + ACME/HTTPS publication** while keeping n8n bound to `127.0.0.1:5678`.
 - **Inventory as code** using sanitized YAML examples and generated local inventory.
-- **Operational documentation** designed for both human maintainers and AI coding agents.
-- **Automated tests** for helper tools and safety guardrails.
+- **Operational runbooks** for bootstrap/baseline and n8n/HTTPS workflows.
+- **GitHub Actions CI** for pytest and Ansible syntax validation.
 
 ## Safety model
 
 The project deliberately separates reusable automation from real infrastructure data:
 
-- tracked files contain only examples and placeholders;
-- real inventory, environment files, keys, secrets, backups, exports, and runtime evidence must stay outside Git;
-- mutating playbooks require an explicit `--limit` and, where appropriate, an explicit apply flag;
-- SSH host key checking is not disabled globally;
-- public services are exposed intentionally, while internal application ports remain loopback-only.
+- tracked files contain examples and placeholders only;
+- real inventories, environment files, keys, secrets, backups, exports, logs, and runtime evidence stay outside Git;
+- mutating playbooks require an explicit single-host `--limit` and appropriate inventory roles;
+- application deployments additionally require explicit apply flags;
+- SSH host-key checking remains enabled;
+- the common baseline owns host-access policy, while application roles own their public service ports;
+- persistent n8n secrets are never silently regenerated when existing database data is detected.
 
-See [`docs/security-model.md`](docs/security-model.md) for the full policy.
+See [`docs/security-model.md`](docs/security-model.md).
 
 ## Repository layout
 
 ```text
 .
+├── .github/workflows/ci.yml
 ├── ansible/
-│   ├── inventories/          # Sanitized example inventory
-│   ├── playbooks/            # Read-only checks and guarded mutations
+│   ├── inventories/
+│   │   ├── bootstrap.example.yml
+│   │   └── production.example.yml
+│   ├── playbooks/
+│   │   ├── bootstrap-admin.yml
+│   │   ├── ping.yml
+│   │   ├── common-baseline.yml
+│   │   ├── n8n-install.yml
+│   │   └── n8n-https-nginx.yml
 │   └── roles/
-│       ├── common/           # Ubuntu baseline and hardening
-│       ├── n8n_stack/        # Docker Compose n8n stack
-│       └── n8n_https_nginx/  # Nginx + ACME/HTTPS publication
-├── config/                   # Sanitized declarative examples
-├── docs/                     # Security model and runbooks
-├── scripts/                  # Local helper tools
-├── tests/                    # Automated checks
-├── AGENTS.md                 # Project map for coding agents
+│       ├── common/
+│       ├── n8n_stack/
+│       └── n8n_https_nginx/
+├── config/nodes.example.yml
+├── docs/
+├── scripts/
+├── tests/
+├── AGENTS.md
 └── ansible.cfg
 ```
 
 ## Quick start
 
-Requirements on the control machine:
+Install local dependencies:
 
-- Python 3.11+
-- Ansible Core
-- PyYAML
+```bash
+python3 -m pip install -r requirements-dev.txt ansible-core
+ansible-galaxy collection install -r collections/requirements.yml
+```
 
-Create a local inventory from the sanitized example configuration:
+### 1. Bootstrap a new VPS
+
+Start from the provider's original SSH path (for example `root:22`):
+
+```bash
+cp ansible/inventories/bootstrap.example.yml ansible/inventories/bootstrap.yml
+
+ansible-playbook -i ansible/inventories/bootstrap.yml \
+  ansible/playbooks/bootstrap-admin.yml \
+  --limit server-01 \
+  -e bootstrap_admin_public_key_file="$HOME/.ssh/id_ed25519.pub"
+```
+
+### 2. Apply the common baseline over the original access path
+
+```bash
+ansible-playbook -i ansible/inventories/bootstrap.yml \
+  ansible/playbooks/common-baseline.yml \
+  --limit server-01 --check --diff
+```
+
+Review the plan, then repeat without `--check --diff`. The default migration keeps SSH `22` while adding and hardening `2322`.
+
+### 3. Verify managed access, then generate production inventory
+
+Verify `ops:2322` from a separate terminal before closing legacy access.
 
 ```bash
 cp config/nodes.example.yml config/nodes.yml
 python3 scripts/generate-inventory.py --overwrite
 ansible-inventory -i ansible/inventories/production.yml --list
-```
-
-Check connectivity:
-
-```bash
 ansible-playbook -i ansible/inventories/production.yml ansible/playbooks/ping.yml --limit server-01
 ```
 
-Run a baseline in check mode before any mutation:
+Full workflow: [`docs/runbook-bootstrap-baseline.md`](docs/runbook-bootstrap-baseline.md).
 
-```bash
-ansible-playbook -i ansible/inventories/production.yml \
-  ansible/playbooks/common-baseline.yml \
-  --limit server-01 --check --diff
-```
+### 4. Deploy n8n
 
-Install the n8n stack only after reviewing the target host and explicitly enabling apply:
+For a public HTTPS deployment, provide the final external URL during stack installation:
 
 ```bash
 ansible-playbook -i ansible/inventories/production.yml \
   ansible/playbooks/n8n-install.yml \
   --limit automation-01 \
   -e n8n_stack_target_alias=automation-01 \
-  -e allow_n8n_stack_apply=true
+  -e n8n_public_url=https://automation.example.com/ \
+  -e allow_n8n_stack_apply=true \
+  --check --diff
 ```
+
+Then review and apply, followed by the guarded HTTPS playbook. See [`docs/runbook-n8n.md`](docs/runbook-n8n.md).
 
 ## Design principles
 
-1. **Read before write.** Connectivity and audit steps precede configuration changes.
-2. **Limit the blast radius.** Mutating operations target exactly one reviewed host by default.
-3. **Fail closed.** Preconditions are assertions, not assumptions.
-4. **Keep secrets local.** A private repository is not a secrets manager; a public one certainly is not.
-5. **Verify after mutation.** Configuration changes are followed by service, listener, and health checks.
-6. **Document rollback.** Runbooks describe expected changes and recovery paths.
+1. **Bootstrap before assuming managed state.** Desired SSH settings are not treated as already available.
+2. **Limit the blast radius.** Mutating operations target exactly one reviewed host.
+3. **Fail closed.** Preconditions and effective configuration are checked explicitly.
+4. **Keep secrets local.** Git is not a secrets manager.
+5. **Separate ownership.** Host baseline and application exposure are managed by different roles.
+6. **Verify after mutation.** SSH policy, listeners, services, and health endpoints are checked.
+7. **Document recovery.** Runbooks describe rollback and provider-console recovery paths.
+
+## Validation
+
+CI installs declared Ansible collections and runs:
+
+```bash
+python -m pytest -q
+ansible-playbook --syntax-check ...
+```
+
+against sanitized example inventories only.
 
 ## Portfolio context
 
-This repository is a sanitized extraction of patterns used in a private VPS operations project. Production topology and service-specific private automation are intentionally excluded. The public version focuses on reusable infrastructure engineering: Ansible, Linux administration, Docker, Nginx, n8n, Python tooling, testing, and AI-agent-friendly project structure.
+This repository is a sanitized extraction of engineering patterns from a private VPS operations project. Production topology and service-specific private automation are intentionally excluded. The public version focuses on reusable infrastructure engineering: Ansible, Linux administration, Docker, Nginx, n8n, Python tooling, testing, CI, and AI-agent-friendly project structure.
 
 ## License
 
