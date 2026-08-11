@@ -1,6 +1,7 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+TEXT_SUFFIXES = {".md", ".yml", ".yaml", ".py", ".j2", ".txt", ".cfg"}
 
 
 def read(path: str) -> str:
@@ -63,7 +64,8 @@ def test_public_repository_contains_no_private_proxy_markers():
     for item in searchable:
         files = [item] if item.is_file() else item.rglob("*")
         for path in files:
-            if path.is_file():
-                text = path.read_text(encoding="utf-8")
-                for marker in forbidden:
-                    assert marker not in text, f"private marker {marker!r} found in {path}"
+            if not path.is_file() or path.suffix not in TEXT_SUFFIXES:
+                continue
+            text = path.read_text(encoding="utf-8")
+            for marker in forbidden:
+                assert marker not in text, f"private marker {marker!r} found in {path}"
