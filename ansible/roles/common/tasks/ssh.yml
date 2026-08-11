@@ -23,15 +23,25 @@
       PermitRootLogin prohibit-password
   register: baseline_sshd_dropin
 
-- name: Validate complete sshd configuration before restart
+- name: Show planned SSH policy in check mode
+  ansible.builtin.debug:
+    msg:
+      target_port: "{{ baseline_ssh_target_port }}"
+      legacy_port_kept: "{{ baseline_keep_ssh_port_22 | bool }}"
+      password_authentication: disabled
+      root_login: key_only
+  when: ansible_check_mode
+
+- name: Validate complete sshd configuration after apply
   ansible.builtin.command: /usr/sbin/sshd -t
   changed_when: false
+  when: not ansible_check_mode
 
-- name: Read effective sshd configuration
+- name: Read effective sshd configuration after apply
   ansible.builtin.command: /usr/sbin/sshd -T
   register: baseline_sshd_effective
   changed_when: false
-  check_mode: false
+  when: not ansible_check_mode
 
 - name: Verify effective SSH hardening and target port
   ansible.builtin.assert:
@@ -42,6 +52,7 @@
     fail_msg: >-
       Effective sshd configuration does not match the managed hardening policy.
       Inspect earlier OpenSSH configuration before restarting SSH.
+  when: not ansible_check_mode
 
 - name: Restart SSH only after validation when policy changed
   ansible.builtin.service:
