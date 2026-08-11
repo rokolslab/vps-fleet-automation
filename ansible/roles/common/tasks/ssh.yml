@@ -48,18 +48,16 @@
     that:
       - "('port ' ~ (baseline_ssh_target_port | string)) in baseline_sshd_effective.stdout_lines"
       - "'passwordauthentication no' in baseline_sshd_effective.stdout_lines"
-      - "'permitrootlogin prohibit-password' in baseline_sshd_effective.stdout_lines or 'permitrootlogin without-password' in baseline_sshd_effective.stdout_lines"
+      - >-
+        'permitrootlogin prohibit-password' in baseline_sshd_effective.stdout_lines or
+        'permitrootlogin without-password' in baseline_sshd_effective.stdout_lines
     fail_msg: >-
       Effective sshd configuration does not match the managed hardening policy.
       Inspect earlier OpenSSH configuration before reloading the listener.
   when: not ansible_check_mode
 
-- name: Detect Ubuntu SSH socket activation
-  ansible.builtin.command: systemctl is-active ssh.socket
-  register: baseline_ssh_socket_active
-  changed_when: false
-  failed_when: false
-  check_mode: false
+- name: Gather service facts for SSH activation mode
+  ansible.builtin.service_facts:
 
 - name: Reload systemd and restart active SSH socket after policy change
   ansible.builtin.systemd_service:
@@ -69,7 +67,8 @@
     daemon_reload: true
   when:
     - baseline_sshd_dropin.changed
-    - baseline_ssh_socket_active.rc == 0
+    - ansible_facts.services['ssh.socket'] is defined
+    - ansible_facts.services['ssh.socket'].state == 'running'
     - not ansible_check_mode
 
 - name: Restart classic SSH service after policy change
@@ -78,5 +77,7 @@
     state: restarted
   when:
     - baseline_sshd_dropin.changed
-    - baseline_ssh_socket_active.rc != 0
+    - >-
+      ansible_facts.services['ssh.socket'] is not defined or
+      ansible_facts.services['ssh.socket'].state != 'running'
     - not ansible_check_mode
