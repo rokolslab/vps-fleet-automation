@@ -1,0 +1,23 @@
+---
+baseline_packages:
+  - ca-certificates
+  - curl
+  - fail2ban
+  - gnupg
+  - unattended-upgrades
+  - ufw
+
+baseline_ssh_target_port: 2322
+baseline_keep_ssh_port_22: true
+baseline_ssh_current_port: 22
+
+baseline_ufw_default_incoming: deny
+baseline_ufw_default_outgoing: allow
+baseline_public_tcp_ports: []
+
+baseline_fail2ban_enabled: true
+baseline_swap_enabled: true
+baseline_swap_file_path: /swapfile
+baseline_swap_size_mb: 1024
+baseline_swappiness: 10
+baseline_unattended_upgrades_enabled: true
