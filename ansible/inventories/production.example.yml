@@ -1,0 +1,16 @@
+all:
+  vars:
+    ansible_user: ops
+    ansible_port: 2322
+  children:
+    managed_vps:
+      hosts:
+        server-01:
+          ansible_host: 192.0.2.10
+          node_roles:
+            - baseline
+        automation-01:
+          ansible_host: 192.0.2.20
+          node_roles:
+            - baseline
+            - automation
