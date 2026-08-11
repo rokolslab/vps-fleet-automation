@@ -1,0 +1,27 @@
+---
+- name: Publish n8n through Nginx HTTPS on one reviewed host
+  hosts: all
+  gather_facts: true
+  become: true
+  vars:
+    allow_n8n_https_apply: false
+    n8n_https_target_alias: ""
+
+  pre_tasks:
+    - name: Guard | Require explicit reviewed target and approval
+      ansible.builtin.assert:
+        that:
+          - ansible_limit is defined
+          - ansible_limit | length > 0
+          - ansible_play_hosts_all | length == 1
+          - n8n_https_target_alias | length > 0
+          - inventory_hostname == n8n_https_target_alias
+          - "'automation' in (node_roles | default([]))"
+          - n8n_https_domain | default('') | length > 0
+          - allow_n8n_https_apply | bool
+        fail_msg: >-
+          HTTPS publication is mutating. Target one reviewed automation host,
+          provide n8n_https_domain, and explicitly enable allow_n8n_https_apply=true.
+
+  roles:
+    - role: ../roles/n8n_https_nginx
