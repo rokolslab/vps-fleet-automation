@@ -1,8 +1,10 @@
 ---
 n8n_stack_dir: /opt/n8n
-n8n_image: docker.n8n.io/n8nio/n8n:latest
-n8n_postgres_image: postgres:16-alpine
-n8n_redis_image: redis:7-alpine
+n8n_image: docker.n8n.io/n8nio/n8n:2.31.7
+n8n_postgres_image: postgres:16.10-alpine
+n8n_redis_image: redis:7.4-alpine
 n8n_bind_host: 127.0.0.1
 n8n_bind_port: 5678
 n8n_timezone: UTC
+n8n_public_url: ""
+n8n_proxy_hops: 1
