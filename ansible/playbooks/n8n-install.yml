@@ -1,0 +1,26 @@
+---
+- name: Install n8n Docker Compose stack on one automation node
+  hosts: all
+  gather_facts: true
+  become: true
+  vars:
+    allow_n8n_stack_apply: false
+    n8n_stack_target_alias: ""
+
+  pre_tasks:
+    - name: Guard | Require explicit reviewed target and approval
+      ansible.builtin.assert:
+        that:
+          - ansible_limit is defined
+          - ansible_limit | length > 0
+          - ansible_play_hosts_all | length == 1
+          - n8n_stack_target_alias | length > 0
+          - inventory_hostname == n8n_stack_target_alias
+          - "'automation' in (node_roles | default([]))"
+          - allow_n8n_stack_apply | bool
+        fail_msg: >-
+          n8n installation is mutating. Target exactly one reviewed automation host,
+          set n8n_stack_target_alias, and explicitly enable allow_n8n_stack_apply=true.
+
+  roles:
+    - role: ../roles/n8n_stack
