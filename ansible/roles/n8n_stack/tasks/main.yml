@@ -13,6 +13,11 @@
     state: started
     enabled: true
 
+- name: Check whether n8n stack directory already exists
+  ansible.builtin.stat:
+    path: "{{ n8n_stack_dir }}"
+  register: n8n_stack_dir_stat
+
 - name: Create n8n stack directory
   ansible.builtin.file:
     path: "{{ n8n_stack_dir }}"
@@ -41,12 +46,21 @@
       Persistent n8n database data exists but the protected .env file is missing.
       Restore the original secrets before continuing; automatic secret rotation is refused.
 
+- name: Show planned secret initialization in check mode
+  ansible.builtin.debug:
+    msg: "Would create a protected .env with generated database and n8n encryption secrets."
+  when:
+    - ansible_check_mode
+    - not n8n_env_file.stat.exists
+
 - name: Generate initial stack secrets
   ansible.builtin.set_fact:
     n8n_generated_postgres_password: "{{ lookup('ansible.builtin.password', '/dev/null', length=32, chars=['ascii_letters','digits']) }}"
     n8n_generated_encryption_key: "{{ lookup('ansible.builtin.password', '/dev/null', length=48, chars=['ascii_letters','digits']) }}"
   no_log: true
-  when: not n8n_env_file.stat.exists
+  when:
+    - not ansible_check_mode
+    - not n8n_env_file.stat.exists
 
 - name: Write protected environment file once
   ansible.builtin.copy:
@@ -58,7 +72,16 @@
       POSTGRES_PASSWORD={{ n8n_generated_postgres_password }}
       N8N_ENCRYPTION_KEY={{ n8n_generated_encryption_key }}
   no_log: true
-  when: not n8n_env_file.stat.exists
+  when:
+    - not ansible_check_mode
+    - not n8n_env_file.stat.exists
+
+- name: Show planned Compose rendering for a new stack in check mode
+  ansible.builtin.debug:
+    msg: "Would render {{ n8n_stack_dir }}/docker-compose.yml and start the reviewed stack."
+  when:
+    - ansible_check_mode
+    - not n8n_stack_dir_stat.stat.exists
 
 - name: Render Docker Compose stack
   ansible.builtin.template:
@@ -67,6 +90,8 @@
     owner: root
     group: root
     mode: '0640'
+  when:
+    - not ansible_check_mode or n8n_stack_dir_stat.stat.exists
 
 - name: Apply n8n Docker Compose stack
   ansible.builtin.command:
