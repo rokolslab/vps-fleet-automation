@@ -23,4 +23,4 @@
           set n8n_stack_target_alias, and explicitly enable allow_n8n_stack_apply=true.
 
   roles:
-    - role: ../roles/n8n_stack
+    - role: n8n_stack

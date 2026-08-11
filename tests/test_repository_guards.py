@@ -19,7 +19,8 @@ def test_ssh_hardening_uses_early_dropin_and_handles_socket_activation():
     tasks = read("ansible/roles/common/tasks/ssh.yml")
     assert "/00-vps-baseline.conf" in defaults
     assert "/usr/sbin/sshd -T" in tasks
-    assert "systemctl is-active ssh.socket" in tasks
+    assert "ansible.builtin.service_facts" in tasks
+    assert "ansible_facts.services['ssh.socket']" in tasks
     assert "daemon_reload: true" in tasks
 
 

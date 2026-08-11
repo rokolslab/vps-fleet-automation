@@ -1,5 +1,7 @@
 # VPS Fleet Automation
 
+[![CI](https://github.com/rokolslab/vps-fleet-automation/actions/workflows/ci.yml/badge.svg)](https://github.com/rokolslab/vps-fleet-automation/actions/workflows/ci.yml)
+
 **English** · [Русский](README.ru.md)
 
 Guarded Ansible automation for a small Ubuntu VPS fleet: first-access bootstrap, secure host baseline, Docker-based n8n deployment, Nginx/HTTPS publication, inventory generation, operational runbooks, tests, and CI validation.
@@ -17,7 +19,8 @@ This repository is a public, sanitized portfolio project. It demonstrates Infras
 - **Nginx + ACME/HTTPS publication** while keeping n8n bound to `127.0.0.1:5678`.
 - **Inventory as code** using sanitized YAML examples and generated local inventory.
 - **Operational runbooks** for bootstrap/baseline and n8n/HTTPS workflows.
-- **GitHub Actions CI** for pytest and Ansible syntax validation.
+- **Pinned validation toolchain** for reproducible CI runs.
+- **GitHub Actions CI** with pytest, yamllint, ansible-lint, and Ansible syntax checks.
 
 ## Safety model
 
@@ -52,20 +55,22 @@ See [`docs/security-model.md`](docs/security-model.md).
 │       ├── common/
 │       ├── n8n_stack/
 │       └── n8n_https_nginx/
+├── collections/requirements.yml
 ├── config/nodes.example.yml
 ├── docs/
 ├── scripts/
 ├── tests/
+├── .yamllint
 ├── AGENTS.md
 └── ansible.cfg
 ```
 
 ## Quick start
 
-Install local dependencies:
+Install the pinned local validation toolchain and Ansible collections:
 
 ```bash
-python3 -m pip install -r requirements-dev.txt ansible-core
+python3 -m pip install -r requirements-dev.txt
 ansible-galaxy collection install -r collections/requirements.yml
 ```
 
@@ -133,10 +138,12 @@ Then review and apply, followed by the guarded HTTPS playbook. See [`docs/runboo
 
 ## Validation
 
-CI installs declared Ansible collections and runs:
+CI installs the pinned toolchain and declared Ansible collections, then runs:
 
 ```bash
 python -m pytest -q
+yamllint .github ansible collections config
+ansible-lint --profile basic ansible/playbooks/*.yml
 ansible-playbook --syntax-check ...
 ```
 
@@ -144,7 +151,7 @@ against sanitized example inventories only.
 
 ## Portfolio context
 
-This repository is a sanitized extraction of engineering patterns from a private VPS operations project. Production topology and service-specific private automation are intentionally excluded. The public version focuses on reusable infrastructure engineering: Ansible, Linux administration, Docker, Nginx, n8n, Python tooling, testing, CI, and AI-agent-friendly project structure.
+This repository is a sanitized extraction of engineering patterns from a private VPS operations project. Production topology and service-specific private automation are intentionally excluded. The public version focuses on reusable infrastructure engineering: Ansible, Linux administration, Docker, Nginx, n8n, Python tooling, testing, linting, CI, and AI-agent-friendly project structure.
 
 ## License
 

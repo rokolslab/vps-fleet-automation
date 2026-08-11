@@ -33,4 +33,4 @@
           - "Do not place private keys, credentials, tokens, or real inventory in Git."
 
   roles:
-    - role: ../roles/common
+    - role: common

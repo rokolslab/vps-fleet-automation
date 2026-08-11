@@ -55,8 +55,8 @@
 
 - name: Generate initial stack secrets
   ansible.builtin.set_fact:
-    n8n_generated_postgres_password: "{{ lookup('ansible.builtin.password', '/dev/null', length=32, chars=['ascii_letters','digits']) }}"
-    n8n_generated_encryption_key: "{{ lookup('ansible.builtin.password', '/dev/null', length=48, chars=['ascii_letters','digits']) }}"
+    n8n_generated_postgres_password: "{{ lookup('ansible.builtin.password', '/dev/null', length=32, chars=['ascii_letters', 'digits']) }}"
+    n8n_generated_encryption_key: "{{ lookup('ansible.builtin.password', '/dev/null', length=48, chars=['ascii_letters', 'digits']) }}"
   no_log: true
   when:
     - not ansible_check_mode
