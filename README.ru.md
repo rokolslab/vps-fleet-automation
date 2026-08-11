@@ -1,5 +1,7 @@
 # VPS Fleet Automation
 
+[![CI](https://github.com/rokolslab/vps-fleet-automation/actions/workflows/ci.yml/badge.svg)](https://github.com/rokolslab/vps-fleet-automation/actions/workflows/ci.yml)
+
 [English](README.md) · **Русский**
 
 Защищённая по умолчанию Ansible-автоматизация для небольшого парка Ubuntu VPS: первичный bootstrap, hardening сервера, развёртывание n8n в Docker, публикация через Nginx/HTTPS, генерация inventory, эксплуатационные runbook'и, тесты и CI.
@@ -17,7 +19,8 @@
 - **Nginx + ACME/HTTPS** при сохранении n8n только на `127.0.0.1:5678`.
 - **Inventory as Code** с обезличенными YAML-примерами и генератором локального inventory.
 - **Runbook'и** для bootstrap/baseline и n8n/HTTPS.
-- **GitHub Actions CI** с pytest и `ansible-playbook --syntax-check`.
+- **Закреплённый validation toolchain** для воспроизводимого CI.
+- **GitHub Actions CI** с pytest, yamllint, ansible-lint и `ansible-playbook --syntax-check`.
 
 ## Модель безопасности
 
@@ -52,20 +55,22 @@
 │       ├── common/
 │       ├── n8n_stack/
 │       └── n8n_https_nginx/
+├── collections/requirements.yml
 ├── config/nodes.example.yml
 ├── docs/
 ├── scripts/
 ├── tests/
+├── .yamllint
 ├── AGENTS.md
 └── ansible.cfg
 ```
 
 ## Быстрый старт
 
-Установите зависимости на управляющей машине:
+Установите закреплённый validation toolchain и Ansible collections:
 
 ```bash
-python3 -m pip install -r requirements-dev.txt ansible-core
+python3 -m pip install -r requirements-dev.txt
 ansible-galaxy collection install -r collections/requirements.yml
 ```
 
@@ -94,8 +99,6 @@ ansible-playbook -i ansible/inventories/bootstrap.yml \
 
 ### 3. Проверьте `ops:2322` и только затем создайте production inventory
 
-Проверьте новый SSH-путь из отдельного терминала. После успешной проверки:
-
 ```bash
 cp config/nodes.example.yml config/nodes.yml
 python3 scripts/generate-inventory.py --overwrite
@@ -106,8 +109,6 @@ ansible-playbook -i ansible/inventories/production.yml ansible/playbooks/ping.ym
 Полный порядок: [`docs/runbook-bootstrap-baseline.md`](docs/runbook-bootstrap-baseline.md).
 
 ### 4. Разверните n8n
-
-Для публичного HTTPS-развёртывания укажите итоговый внешний URL уже при установке stack:
 
 ```bash
 ansible-playbook -i ansible/inventories/production.yml \
@@ -133,11 +134,20 @@ ansible-playbook -i ansible/inventories/production.yml \
 
 ## Проверка качества
 
-CI устанавливает объявленные Ansible collections и выполняет Python-тесты и syntax checks только на обезличенных примерах.
+CI устанавливает закреплённый toolchain и объявленные Ansible collections, затем выполняет:
+
+```bash
+python -m pytest -q
+yamllint .github ansible collections config
+ansible-lint --profile basic ansible/playbooks/*.yml
+ansible-playbook --syntax-check ...
+```
+
+Проверки выполняются только на обезличенных примерах.
 
 ## Контекст для портфолио
 
-Репозиторий представляет собой обезличенную публичную выборку инженерных паттернов из приватного проекта управления VPS. Production-топология и специализированная приватная автоматизация намеренно исключены. Публичная версия показывает Ansible, Linux administration, Docker, Nginx, n8n, Python tooling, testing, CI и структуру проекта для совместной работы с AI coding agents.
+Репозиторий представляет собой обезличенную публичную выборку инженерных паттернов из приватного проекта управления VPS. Production-топология и специализированная приватная автоматизация намеренно исключены. Публичная версия показывает Ansible, Linux administration, Docker, Nginx, n8n, Python tooling, testing, linting, CI и структуру проекта для совместной работы с AI coding agents.
 
 ## Лицензия
 
