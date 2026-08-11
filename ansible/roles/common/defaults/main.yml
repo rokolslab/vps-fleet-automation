@@ -14,7 +14,6 @@ baseline_ssh_dropin_path: /etc/ssh/sshd_config.d/00-vps-baseline.conf
 
 baseline_ufw_default_incoming: deny
 baseline_ufw_default_outgoing: allow
-baseline_public_tcp_ports: []
 
 baseline_fail2ban_enabled: true
 baseline_swap_enabled: true
