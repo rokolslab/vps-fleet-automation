@@ -78,8 +78,14 @@
     'Started' in (n8n_compose_up.stdout ~ n8n_compose_up.stderr) or
     'Recreated' in (n8n_compose_up.stdout ~ n8n_compose_up.stderr)
 
-- name: Wait for loopback n8n port
+- name: Show planned loopback listener in check mode
+  ansible.builtin.debug:
+    msg: "n8n will bind to {{ n8n_bind_host }}:{{ n8n_bind_port }}"
+  when: ansible_check_mode
+
+- name: Wait for loopback n8n port after apply
   ansible.builtin.wait_for:
     host: "{{ n8n_bind_host }}"
     port: "{{ n8n_bind_port }}"
     timeout: 60
+  when: not ansible_check_mode
