@@ -1,0 +1,5 @@
+---
+n8n_https_domain: ""
+n8n_https_upstream_host: 127.0.0.1
+n8n_https_upstream_port: 5678
+n8n_https_certbot_email: ""
