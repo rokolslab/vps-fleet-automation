@@ -1,0 +1,32 @@
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ansible/
+*.retry
+
+# Real inventories and local fleet data
+ansible/inventories/*.yml
+!ansible/inventories/*.example.yml
+ansible/group_vars/**/*.yml
+!ansible/group_vars/**/*.example.yml
+ansible/host_vars/**/*.yml
+!ansible/host_vars/**/*.example.yml
+config/*.yml
+!config/*.example.yml
+
+# Secrets and runtime artifacts
+*.pem
+*.key
+*.ppk
+vault-password*
+backups/
+exports/
+*.sqlite
+*.db
+*.tar
+*.tar.gz
+*.zip
