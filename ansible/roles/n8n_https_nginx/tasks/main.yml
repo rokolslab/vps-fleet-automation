@@ -25,6 +25,11 @@
     port: '443'
     proto: tcp
 
+- name: Disable packaged Nginx default site
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+
 - name: Ensure ACME webroot exists
   ansible.builtin.file:
     path: /var/www/html/.well-known/acme-challenge
