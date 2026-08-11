@@ -24,4 +24,4 @@
           provide n8n_https_domain, and explicitly enable allow_n8n_https_apply=true.
 
   roles:
-    - role: ../roles/n8n_https_nginx
+    - role: n8n_https_nginx
