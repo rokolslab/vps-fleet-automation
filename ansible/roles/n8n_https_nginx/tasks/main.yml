@@ -1,0 +1,86 @@
+---
+- name: Install Nginx and Certbot
+  ansible.builtin.apt:
+    name:
+      - nginx
+      - certbot
+    state: present
+    update_cache: true
+
+- name: Ensure ACME webroot exists
+  ansible.builtin.file:
+    path: /var/www/html/.well-known/acme-challenge
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: '0755'
+
+- name: Install temporary HTTP-only ACME configuration
+  ansible.builtin.copy:
+    dest: /etc/nginx/sites-available/n8n-bootstrap.conf
+    mode: '0644'
+    content: |
+      server {
+          listen 80;
+          server_name {{ n8n_https_domain }};
+          location /.well-known/acme-challenge/ { root /var/www/html; }
+      }
+
+- name: Enable temporary ACME site
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/n8n-bootstrap.conf
+    dest: /etc/nginx/sites-enabled/n8n-bootstrap.conf
+    state: link
+
+- name: Validate temporary Nginx configuration
+  ansible.builtin.command: nginx -t
+  changed_when: false
+
+- name: Reload Nginx for ACME challenge
+  ansible.builtin.service:
+    name: nginx
+    state: reloaded
+    enabled: true
+
+- name: Request or renew certificate with webroot
+  ansible.builtin.command: >-
+    certbot certonly --webroot -w /var/www/html
+    -d {{ n8n_https_domain }} --non-interactive --agree-tos
+    {{ '--email ' ~ n8n_https_certbot_email if n8n_https_certbot_email | length > 0 else '--register-unsafely-without-email' }}
+  args:
+    creates: "/etc/letsencrypt/live/{{ n8n_https_domain }}/fullchain.pem"
+
+- name: Render final HTTPS site
+  ansible.builtin.template:
+    src: n8n.conf.j2
+    dest: /etc/nginx/sites-available/n8n.conf
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Enable final HTTPS site
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/n8n.conf
+    dest: /etc/nginx/sites-enabled/n8n.conf
+    state: link
+
+- name: Remove temporary ACME site link
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/n8n-bootstrap.conf
+    state: absent
+
+- name: Validate final Nginx configuration
+  ansible.builtin.command: nginx -t
+  changed_when: false
+
+- name: Reload final Nginx configuration
+  ansible.builtin.service:
+    name: nginx
+    state: reloaded
+    enabled: true
+
+- name: Verify loopback n8n upstream remains reachable
+  ansible.builtin.wait_for:
+    host: "{{ n8n_https_upstream_host }}"
+    port: "{{ n8n_https_upstream_port }}"
+    timeout: 30
