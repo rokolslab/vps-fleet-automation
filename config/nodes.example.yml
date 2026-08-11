@@ -1,0 +1,14 @@
+defaults:
+  ansible_user: ops
+  ansible_port: 2322
+
+nodes:
+  server-01:
+    host: 192.0.2.10
+    roles:
+      - baseline
+  automation-01:
+    host: 192.0.2.20
+    roles:
+      - baseline
+      - automation
